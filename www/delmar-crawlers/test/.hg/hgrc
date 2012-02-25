@@ -1,0 +1,5 @@
+[paths]
+default = http://localhost:8000/ZVZ
+
+[ui]
+username = Yuri Tkachenko <yuri@progforce.com>

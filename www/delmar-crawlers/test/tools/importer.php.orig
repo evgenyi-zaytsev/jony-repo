@@ -1,0 +1,396 @@
+<?php
+
+/*
+ * Tool for importing data from crawler to production database
+ * @author Yuri Tkachenko <yuri@progforce.com>
+ */
+
+class tools_importer {
+
+    private $_db; // PDO ORM object
+    private $_siteId;
+    private $_sourceDataTable; // Import source table name
+    private $_sourceImagesTable;
+
+    /**
+     * Class Initialization
+     * @global type $host
+     * @global type $user
+     * @global type $pass
+     * @global type $dbname 
+     */
+    function _init() {
+        phpCrawler::load('lib/idiorm/idiorm.php');
+
+        ORM::configure('mysql:host=' . phpCrawler::conf()->host . ';dbname=' . phpCrawler::conf()->dbname);
+        ORM::configure('username', phpCrawler::conf()->user);
+        ORM::configure('password', phpCrawler::conf()->pass);
+        ORM::configure('id_column_overrides', array(
+            'sitesp' => 'Site_Id'
+        ));
+    }
+
+    /**
+     * Main importing method
+     * @global Object $production
+     * @param Object $job
+     * @return String Status Message 
+     */
+    public function tools_import($job) {
+
+        require '_mapping.php';
+        $production = phpCrawler::conf()->production;
+
+        $mtime = explode(" ", microtime());
+        $starttime = $mtime[1] + $mtime[0];
+
+        $new = 0;
+        $updated = 0;
+
+        // Preparing parameters
+        $job = unserialize($job->workload());
+        $this->_sourceDataTable = $job['siteName'] . '_Temp_Ads';
+        $this->_sourceImagesTable = $job['siteName'] . '_Images';
+
+        $siteInfo = ORM::for_table($production->sites)->where('Site_Name', $job['siteName'])->find_one();
+        $this->_siteId = $siteInfo->Site_Id;
+
+        $this->_db = ORM::get_db();
+
+        $importedImgs = 0;
+        $need = TRUE;
+        $date = date('Y-m-d H-m-s',time());
+        while ($need) {
+            $importData = ORM::for_table($this->_sourceDataTable)->where_raw('AD_status = 0 AND `AD_timestamp` < "'.$date.'"')->limit(100)->find_many();
+	    phpCrawler::log()->logInfo("Found ".count($importData)." ADs to import!");
+            if (count($importData) != 0) {
+
+                phpCrawler::log()->logInfo("GOT NEW 100:");
+
+                foreach ($importData as $ad) {
+
+                    $impored = 0;
+                    $adImgs = 0;
+
+                    $row = array();
+
+                    $row["POST_ID"] = '';
+                    $row["cDate"] = 'NULL';
+                    $row["uDate"] = 'NULL';
+                    $row["fDate"] = 'NULL';
+                    $row["dDate"] = 'NULL';
+                    $row["eDate"] = 'NULL';
+                    $row["AD_Site"] = (int) $this->_siteId;
+                    $row["AD_Section"] = (int) $ad->AD_Section;
+                    $row["AD_KEY"] = $this->cl($ad->AD_KEY);
+                    $row["AD_Status"] = 'NULL';
+                    $row["AD_UserId"] = 'NULL';
+                    $row["AD_Random"] = 'NULL';
+                    $row["Ad_Link"] = $this->cl($ad->Ad_Link);
+                    $row["pictureHave"] = 'NULL';
+                    $row["pictureFromIcar"] = 'NULL';
+                    $row["PicturesString"] = 'NULL';
+                    $row["videoHave"] = 'NULL';
+                    $row["AD_Phone1"] = $this->cl($ad->AD_Phone1);
+                    $row["AD_Phone2"] = $this->cl($ad->AD_Phone2);
+                    $row["AD_ContactName1"] = $this->cl($ad->AD_ContactName1);
+                    $row["AD_ContactName2"] = $this->cl($ad->AD_ContactName2);
+                    $row["AD_ContactEmail"] = $this->cl($ad->AD_ContactEmail);
+                    $row["AD_ContactCity"] = 'NULL';
+                    $row["Ad_Fax"] = 'NULL';
+                    $row["AD_WebSite"] = 'NULL';
+                    $row["AD_ContactAddress"] = 'NULL';
+                    $row["AD_PostDate"] = 'NULL';
+                    $row["AD_UpdateDate"] = $this->cl($ad->AD_UpdateDate);
+                    $row["AD_Region"] = $this->cl($ad->AD_Region);
+                    $row["AD_Area"] = $this->cl($ad->AD_Area);
+                    $row["AD_City"] = $this->cl($ad->AD_City);
+                    $row["AD_CityArea"] = 'NULL';
+                    $row["AD_Address"] = $this->cl($ad->AD_Address);
+                    $row["AD_Price"] = $this->num($ad->AD_Price);
+                    $row["AD_PriceNIS"] = 'NULL';
+                    $row["AD_CostTotal"] = 'NULL';
+                    $row["AD_Notes"] = $this->cl($ad->AD_Notes);
+                    $row["AD_Coords"] = 'NULL';
+                    $row["AD_CoordsCheck"] = 'NULL';
+                    $row["app_MoveInDate"] = $this->cl($ad->app_MoveInDate);
+                    $row["app_Neighborhood"] = $this->cl($ad->app_Neighborhood);
+                    $row["app_AddressStreet"] = 'NULL';
+                    $row["app_AddressNumber"] = 'NULL';
+                    $row["app_AddressDescription"] = '';
+                    $row["app_meter"] = $this->cl($ad->app_meter);
+                    $row["app_meterInt"] = 'NULL';
+                    $row["app_PropertyTypeIndex"] = $this->cl($ad->app_PropertyTypeIndex);
+                    $row["app_Typeindex"] = 'NULL';
+                    $row["app_Rooms"] = $this->num($ad->app_Rooms);
+                    $row["app_Floor"] = $this->num($ad->app_Floor);
+                    $row["app_FloorTotal"] = $this->cl($ad->app_FloorTotal);
+                    $row["app_FloorDescription"] = 'NULL';
+                    $row["app_PaymentsNumber"] = 'NULL';
+                    $row["app_Furniture"] = $this->cl($ad->app_Furniture);
+                    $row["app_FurnitureIndex"] = $this->cl($ad->app_FurnitureIndex);
+                    $row["app_FurnitureHave"] = 'NULL';
+                    $row["app_FlatMatesCount"] = $this->cl($ad->app_FlatMatesCount);
+                    $row["app_RequiredGenderIndex"] = $this->cl($ad->app_RequiredGenderIndex);
+                    $row["app_BarsIndex"] = $this->cl($ad->app_BarsIndex);
+                    $row["app_LiftIndex"] = $this->cl($ad->app_LiftIndex);
+                    $row["app_AirConIndex"] = $this->cl($ad->app_AirConIndex);
+                    $row["app_AirConHave"] = 'NULL';
+                    $row["app_storeroom"] = $this->cl($ad->app_storeroom);
+                    $row["app_ParkingIndex"] = $this->cl($ad->app_ParkingIndex);
+                    $row["app_ParkingHave"] = 'NULL';
+                    $row["app_LocationIndex"] = 'NULL';
+                    $row["app_BalconyIndex"] = $this->cl($ad->app_BalconyIndex);
+                    $row["app_BalconeCount"] = $this->num($ad->app_BalconeCount);
+                    $row["app_BalconyHave"] = 'NULL';
+                    $row["app_SmokingIndex"] = $this->cl($ad->app_SmokingIndex);
+                    $row["app_RenovatedIndex"] = $this->cl($ad->app_RenovatedIndex);
+                    $row["app_TypeProperty"] = 'NULL';
+                    $row["app_AirDirection"] = $this->cl($ad->app_AirDirection);
+                    $row["app_Status"] = $this->cl($ad->app_Status);
+                    $row["app_RentTime"] = $this->cl($ad->app_RentTime);
+                    $row["app_Partners"] = $this->cl($ad->app_Partners);
+                    $row["app_Animal"] = $this->cl($ad->app_Animal);
+                    $row["app_PartnerSex"] = 'NULL';
+                    $row["app_handicapped"] = $this->cl($ad->app_handicapped);
+                    $row["app_Mamad"] = 'NULL';
+                    $row["app_SunBalcone"] = $this->cl($ad->app_SunBalcone);
+                    $row["app_Arnona"] = 'NULL';
+                    $row["app_Kosher"] = 'NULL';
+                    $row["app_Entrance"] = 'NULL';
+                    $row["app_ExtendOption"] = $this->cl($ad->app_ExtendOption);
+                    $row["app_MoveInDateDT"] = 'NULL';
+                    $row["app_IsKones"] = 'NULL';
+                    $row["app_LastServeDate"] = 'NULL';
+                    $row["app_Appraiser"] = 'NULL';
+                    $row["app_IsRealtor"] = 'NULL';
+                    $row["car_Maker"] = $this->cl($ad->car_Maker);
+                    $row["car_Model"] = $this->cl($ad->car_Model);
+                    $row["car_Color"] = $this->cl($ad->car_Color);
+                    $row["car_GearFull"] = 'NULL';
+                    $row["car_SubModel"] = $this->cl($ad->car_SubModel);
+                    $row["car_Engine"] = $this->cl($ad->car_Engine);
+                    $row["car_Hand"] = $this->cl($ad->car_Hand);
+                    $row["car_Year"] = $this->num($ad->car_Year);
+                    $row["car_gear"] = $this->cl($ad->car_gear);
+                    $row["car_owner"] = $this->cl($ad->car_owner);
+                    $row["car_PreviousOwner"] = $this->cl($ad->car_PreviousOwner);
+                    $row["car_Doors"] = $this->cl($ad->car_Doors);
+                    $row["car_km"] = $this->num($ad->car_km);
+                    $row["car_Addition"] = $this->cl($ad->car_Addition);
+                    $row["car_AirCon"] = $this->cl($ad->car_AirCon);
+                    $row["car_Volume"] = $this->num($ad->car_Volume);
+                    $row["car_NextTest"] = 'NULL';
+                    $row["car_Accessory"] = 'NULL';
+                    $row["car_AcceptTrade"] = $this->cl($ad->car_AcceptTrade);
+                    $row["car_ICarId"] = 'NULL';
+                    $row["car_ICar_PastModel"] = 'NULL';
+                    $row["car_ElectricWindows"] = $this->cl($ad->car_ElectricWindows);
+                    $row["car_GPS"] = $this->cl($ad->car_GPS);
+                    $row["car_DVD"] = $this->cl($ad->car_DVD);
+                    $row["car_ABS"] = $this->cl($ad->car_ABS);
+                    $row["car_Conditioner"] = 'NULL';
+                    $row["car_Sunroof"] = $this->cl($ad->car_Sunroof);
+                    $row["car_Airbags"] = $this->cl($ad->car_Airbags);
+                    $row["car_AlloyWheels"] = $this->cl($ad->car_AlloyWheels);
+                    $row["yad2_Category"] = $this->cl($ad->yad2_Category);
+                    $row["yad2_Product"] = $this->cl($ad->yad2_Product);
+                    $row["yad2_Description"] = 'NULL';
+                    $row["yad2_NameProduct"] = $this->cl($ad->yad2_NameProduct);
+                    $row["yad2_Operation"] = 'NULL';
+                    $row["yad2_SubCategory"] = $this->cl($ad->yad2_SubCategory);
+                    $row["yad2_Maker"] = $this->cl($ad->yad2_Maker);
+                    $row["Yad2_Status"] = $this->cl($ad->Yad2_Status);
+                    $row["Yad2_AcceptTrade"] = $this->cl($ad->Yad2_AcceptTrade);
+                    $row["anim_Age"] = $this->cl($ad->anim_Age);
+                    $row["anim_Gender"] = $this->cl($ad->anim_Gender);
+                    $row["anim_Association"] = 'NULL';
+                    $row["anim_Neutered"] = 'NULL';
+                    $row["anim_Type"] = 'NULL';
+                    $row["anim_Breed"] = $this->cl($ad->anim_Breed);
+                    $row["anim_Hours"] = 'NULL';
+                    $row["anim_Immuned"] = 'NULL';
+                    $row["anim_ImmuneDetails"] = 'NULL';
+                    $row["req_Range"] = 'NULL';
+                    $row["req_Role"] = 'NULL';
+                    $row["req_Notes"] = 'NULL';
+                    $row["req_JobRank"] = 'NULL';
+                    $row["req_CompanyName"] = 'NULL';
+                    $row["req_CompanyDetails"] = 'NULL';
+                    $row["req_CompanyRequirement"] = 'NULL';
+                    $row["req_CompanyLogo"] = 'NULL';
+                    $row["AD_Test"] = 'NULL';
+                    $row["AD_md5"] = $ad->AD_md5;
+
+                    $at = ORM::for_table($production->data)->where('AD_md5', $ad->AD_md5)->find_one();
+                    if ($at) {
+
+                        $updatedFields = array();
+
+                        foreach ($row as $key => $value) {
+                            if ($key != "POST_ID" && $value != $at->$key) {
+                                if ($value != 'NULL' && $at->$key != NULL) {
+                                    $updatedFields[$key] = $value;
+                                }
+                            }
+                        }
+
+                        if (count($updatedFields) > 0) {
+                            $updated++;
+                            $impored = 2;
+                        }
+                    } else {
+
+                        $new++;
+                        $impored = 1;
+                    }
+
+                    if ($impored > 0) {
+
+                        $newOne = ORM::for_table($production->data)->create();
+                        foreach ($row as $key => $value) {
+                            $newOne->$key = $value;
+                        }
+                        $newOne->save();
+
+                        $images = ORM::for_table($this->_sourceImagesTable)->
+                                        where('AD_status', 0)->
+                                        where('AD_Key', $ad->id)->
+                                        where('Ad_Site', $ad->AD_Site)->
+                                        where('Ad_Section', $ad->AD_Section)->find_many();
+
+                        foreach ($images as $image) {
+                            $img = ORM::for_table($production->images)->create();
+                            $img->AD_Key = $ad->AD_KEY;
+                            $img->cDate = $image->cDate;
+                            $img->Ad_Site = $image->Ad_Site;
+                            $img->Ad_Section = $image->Ad_Section;
+                            $img->ImagePath = $image->ImagePath;
+                            $img->ImageName = $image->ImageName;
+                            $img->save();
+                            $importedImgs++;
+                            $adImgs++;
+                        }
+
+                        $sql = "UPDATE `$this->_sourceImagesTable` SET `AD_status` = 4 WHERE `AD_Key` = '$ad->id' AND `Ad_Site` = $ad->AD_Site AND `Ad_Section` = $ad->AD_Section;";
+
+                        $this->db_query($sql);
+                    }
+
+                    switch ($impored) {
+                        case 1:
+                            $tail = "new";
+                            break;
+                        case 2:
+                            $tail = "upd";
+                            break;
+                        default:
+                            $tail = "old";
+                            break;
+                    }
+
+                    phpCrawler::log()->logInfo("$this->_sourceDataTable AD --> $ad->id $tail + $adImgs");
+
+                    $sql = "UPDATE `$this->_sourceDataTable` SET `AD_status` = 4 WHERE `id` = $ad->id;";
+                    $this->db_query($sql);
+                };
+            } else {
+                $need = FALSE;
+            }
+        }
+
+        $all = $updated + $new;
+
+        //Cleaning the tables
+        //$sql_maxId = "SELECT MAX(id) as max FROM ``";
+        //phpCrawler::log()->logDebug($sql_maxId);
+        $maxId = ORM::for_table($this->_sourceDataTable)->select_expr("MAX(id)","max")->find_one();
+	if(!$maxId->max) {
+		phpCrawler::log()->logError("no data in table, max Id is none!");
+		return;
+	};
+	//$maxId = $this->_db->exec($sql_maxId);
+        phpCrawler::log()->logDebug($maxId->max);
+
+        $sql_deleteData = "DELETE FROM `$this->_sourceDataTable` WHERE `id` <= " . $maxId->max;
+        $sql_deleteImage = "DELETE FROM `$this->_sourceImagesTable` WHERE `AD_Key` <= " . $maxId->max;
+        
+        phpCrawler::log()->logDebug($sql_deleteData);
+        phpCrawler::log()->logDebug($sql_deleteImage);
+        $this->db_query($sql_deleteData);
+        $this->db_query($sql_deleteImage);
+        
+//        $sql = "DELETE data.*, image.* FROM `$this->_sourceDataTable` AS data LEFT JOIN `$this->_sourceImagesTable` AS image ON data.id = image.AD_Key  WHERE `AD_timestamp` < '".$date."'";
+//        phpCrawler::log()->logDebug($sql);
+//        $this->db_query($sql);
+        
+//        $sql = "DELETE FROM `$this->_sourceImagesTable` WHERE DATE(`AD_timestamp`) = DATE('".date("Y-m-d")."')'";
+//        $this->db_query($sql);
+
+        $stat = ORM::for_table('stat')->create();
+        $stat->OP_Site = $this->_siteId;
+        $stat->OP_New = $new;
+        $stat->OP_Upd = $updated;
+        $stat->OP_Img = $importedImgs;
+        $stat->OP_Type = 'i';
+        $stat->save();
+
+        $mtime = explode(" ", microtime());
+        $endtime = $mtime[1] + $mtime[0];
+        $totaltime = $this->sec2hms(round($endtime - $starttime, 0));
+
+        $imp = ORM::for_table('sitesp')->where('Site_Id', $this->_siteId)->find_one();
+        if ($all != 0) {
+            $imp->Site_Imported = 1;
+        } else {
+            $imp->Site_Imported = 0;
+        }
+        $imp->save();
+
+        $str = "Added $new ADs, and $updated updated for " . $job['siteName'] . ". Total: $all.\nAdded $importedImgs images.\nThis update took $totaltime!\n";
+        phpCrawler::log()->logInfo($str);
+
+        unset($job, $mtime, $starttime, $new, $updated, $siteInfo, $imagesBefore, $imagesImport, $importData, $impored, $at, $updatedFields, $dataImport, $dataValues, $sql, $imagesAfter, $images, $all, $endtime, $totaltime);
+
+        return $str;
+    }
+
+    private function cl($value) {
+        $value = (string) preg_replace("/[\t\s\n\r]+/", " ", trim($value));
+        $value = (string) preg_replace("/\\&/", "", trim($value));
+        $result = $value == '' ? 'NULL' : trim($value);
+        return mysql_escape_string($result);
+    }
+
+    private function num($value) {
+        $value = (int) preg_replace("/[^0-9]/", '', $value);
+        $result = $value == '' ? 'NULL' : $value;
+        return $result;
+    }
+
+    private function sec2hms($sec, $padHours = false) {
+        $hms = "";
+        $hours = intval(intval($sec) / 3600);
+        $hms .= ( $padHours) ? str_pad($hours, 2, "0", STR_PAD_LEFT) . ":" : $hours . ":";
+        $minutes = intval(($sec / 60) % 60);
+        $hms .= str_pad($minutes, 2, "0", STR_PAD_LEFT) . ":";
+        $seconds = intval($sec % 60);
+        $hms .= str_pad($seconds, 2, "0", STR_PAD_LEFT);
+        return $hms;
+    }
+
+    private function db_query($sql) {
+        try {
+            $this->_db->beginTransaction();
+            $this->_db->exec($sql);
+            $this->_db->commit();
+            #phpCrawler::log()->logInfo("Transaction successful!\n\nSQL: $sql");
+        } catch (Exception $e) {
+            phpCrawler::log()->logError("Transaction rolled back!\n\nSQL: $sql \n\nMSG: $e");
+            $this->_db->rollback();
+        }
+    }
+
+}
+
+?>

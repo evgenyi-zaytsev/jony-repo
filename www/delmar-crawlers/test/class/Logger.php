@@ -1,0 +1,203 @@
+<?php
+
+/**
+ * Class documentation
+ */
+class Logger
+{
+    const EMERG  = 0;  // Emergency: system is unusable
+    const ALERT  = 1;  // Alert: action must be taken immediately
+    const CRIT   = 2;  // Critical: critical conditions
+    const ERR    = 3;  // Error: error conditions
+    const WARN   = 4;  // Warning: warning conditions
+    const NOTICE = 5;  // Notice: normal but significant condition
+    const INFO   = 6;  // Informational: informational messages
+    const DEBUG  = 7;  // Debug: debug messages
+
+    //custom logging level
+    /**
+     * Alias for CRIT
+     * @deprecated
+     */
+    const FATAL  = 2;
+
+    private static $_defaultSeverity    = self::DEBUG;
+    
+    /**
+     * Valid PHP date() format string for log timestamps
+     * @var string
+     */
+    private static $_dateFormat         = 'Y-m-d G:i:s';
+    /**
+     * Writes a $line to the log with a severity level of DEBUG
+     *
+     * @param string $line Information to log
+     * @return void
+     */
+    public function logDebug($line, $logType = null)
+    {
+        $this->log($line, self::DEBUG, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with a severity level of INFO. Any information
+     * can be used here, or it could be used with E_STRICT errors
+     *
+     * @param string $line Information to log
+     * @return void
+     */
+    public function logInfo($line, $logType = null)
+    {
+        $this->log($line, self::INFO, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with a severity level of NOTICE. Generally
+     * corresponds to E_STRICT, E_NOTICE, or E_USER_NOTICE errors
+     *
+     * @param string $line Information to log
+     * @return void
+     */
+    public function logNotice($line, $logType = null)
+    {
+        $this->log($line, self::NOTICE, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with a severity level of WARN. Generally
+     * corresponds to E_WARNING, E_USER_WARNING, E_CORE_WARNING, or 
+     * E_COMPILE_WARNING
+     *
+     * @param string $line Information to log
+     * @return void
+     */
+    public function logWarn($line, $logType = null)
+    {
+        $this->log($line, self::WARN, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with a severity level of ERR. Most likely used
+     * with E_RECOVERABLE_ERROR
+     *
+     * @param string $line Information to log
+     * @return void
+     */
+    public function logError($line, $logType = null)
+    {
+        $this->log($line, self::ERR, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with a severity level of FATAL. Generally
+     * corresponds to E_ERROR, E_USER_ERROR, E_CORE_ERROR, or E_COMPILE_ERROR
+     *
+     * @param string $line Information to log
+     * @return void
+     * @deprecated Use logCrit
+     */
+    public function logFatal($line, $logType = null)
+    {
+        $this->log($line, self::FATAL, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with a severity level of ALERT.
+     *
+     * @param string $line Information to log
+     * @return void
+     */
+    public function logAlert($line, $logType = null)
+    {
+        $this->log($line, self::ALERT, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with a severity level of CRIT.
+     *
+     * @param string $line Information to log
+     * @return void
+     */
+    public function logCrit($line, $logType = null)
+    {
+        $this->log($line, self::CRIT, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with a severity level of EMERG.
+     *
+     * @param string $line Information to log
+     * @return void
+     */
+    public function logEmerg($line, $logType = null)
+    {
+        $this->log($line, self::EMERG, $logType);
+    }
+
+    /**
+     * Writes a $line to the log with the given severity
+     *
+     * @param string  $line     Text to add to the log
+     * @param integer $severity Severity level of log message (use constants)
+     */
+    public function log($line, $severity, $logType = null)
+    {
+        $status = $this->_getTimeLine($severity);
+        $tmp = "";
+        if($logType){
+            if(isset(phpCrawler::conf()->crawlerLogType[$logType])){
+                $tmp = phpCrawler::conf()->crawlerLogType[$logType];
+            }
+        }
+        
+        if($severity <= phpCrawler::conf()->systemLogLevel && phpCrawler::conf()->systemLog){
+		$tmp = $tmp !=""?" - ".$tmp: "";
+		$data = "$status ".phpCrawler::conf()->name.$tmp." - $line ";
+		clientSendData::getInstance()->send("class_systemLog", $data.PHP_EOL);
+		if ( !isset(phpCrawler::conf()->error_subj) || !(phpCrawler::conf()->error_subj === $line) ) {
+			phpCrawler::conf()->add("error_subj", $line);
+			clientSendData::getInstance()->send("tools_mail", array("subject" => phpCrawler::conf()->name . " error!", "message" => $data, "toadmin" => true));
+		}
+        }
+        $this->write("$status $tmp $line ".PHP_EOL);
+    }
+
+    /**
+     * Writes a line to the log without prepending a status or timestamp
+     *
+     * @param string $line Line to write to the log
+     * @return void
+     */
+    public function write($line)
+    {
+        echo $line;
+    }
+
+    private function _getTimeLine($level)
+    {
+        $time = date(self::$_dateFormat);
+
+        switch ($level) {
+            case self::EMERG:
+                return "$time - EMERG -->";
+            case self::ALERT:
+                return "$time - ALERT -->";
+            case self::CRIT:
+                return "$time - CRIT -->";
+            case self::FATAL: # FATAL is an alias of CRIT
+                return "$time - FATAL -->";
+            case self::NOTICE:
+                return "$time - NOTICE -->";
+            case self::INFO:
+                return "$time - INFO -->";
+            case self::WARN:
+                return "$time - WARN -->";
+            case self::DEBUG:
+                return "$time - DEBUG -->";
+            case self::ERR:
+                return "$time - ERROR -->";
+            default:
+                return "$time - LOG -->";
+        }
+    }
+}

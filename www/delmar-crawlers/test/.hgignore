@@ -1,0 +1,12 @@
+\.orig$
+\.orig\..*$
+\.chg\..*$
+\.rej$
+\.conflict\~$
+syntax: glob
+lib/.DS_Store
+lib/idiorm/.gitignore
+lib/simplehtmldom/.DS_Store
+nbproject/*
+log/*
+*.swp

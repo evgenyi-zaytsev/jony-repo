@@ -1,0 +1,85 @@
+<?php
+/**
+ * Description of ProxyManager
+ *
+ * @author progforce
+ */
+class system_proxyManager {
+
+       protected $__browser;
+
+       public function __construct() {
+              phpCrawler::load('lib/idiorm/idiorm.php');
+
+              ORM::configure('mysql:host='.phpCrawler::conf()->host.';dbname='.phpCrawler::conf()->dbname);
+              ORM::configure('username', phpCrawler::conf()->user);
+              ORM::configure('password', phpCrawler::conf()->pass);
+
+              $this->__browser = &new SimpleBrowser();
+              $this->__browser->useCookies();
+              $this->__browser->addHeader("Accept: text/xml,application/xml,application/xhtml+xml,text/html;q=0.9,text/plain;q=0.8,image/png,*/*;q=0.5");
+              $this->__browser->addHeader("User-Agent: Mozilla/5.0 (Macintosh; Intel Mac OS X 10.6; rv:2.0) Gecko/20100101 Firefox/4.0");
+              $this->__browser->addHeader("Cache-Control: max-age=0");
+              $this->__browser->addHeader("Connection: keep-alive");
+              $this->__browser->addHeader("Keep-Alive: 300");
+              $this->__browser->addHeader("Accept-Charset: ISO-8859-1,utf-8;q=0.7,*;q=0.7");
+              $this->__browser->addHeader("Accept-Language: en-us,en;q=0.5");
+              $this->__browser->addHeader("Pragma: ");
+       }
+
+       public function system_ProxyManager($job) {
+              $job = unserialize($job->workload());
+              $root_address = $job['url'];
+
+              try {
+                     $proxy_list = ORM::for_table('Proxy_List')->where_not_equal('proxy_status', 2)->find_many();
+              }
+              catch(Exception $e) {
+                     phpCrawler::log()->logCrit("PROXY MANAGER DATABASE ERROR:: " . $e->getMessage(),'db_error');
+              }
+
+              if (count($proxy_list) < 1) phpCrawler::log()->logCrit("DATABASE ERROR: PROXY LIST IS EMPTY!");
+
+              phpCrawler::log()->logInfo("1. Loaded " . count($proxy_list) . "proxy");
+              foreach ($proxy_list as $proxy) {
+                     $currentProxy = array ();
+                     $currentProxy['ip'] = $proxy->ip;
+                     $currentProxy['port'] = $proxy->port;
+
+                     $this->__browser->useProxy("http://" . $currentProxy['ip'] . ":" . $currentProxy['port'], null, null);
+
+                     $timeStart = time();
+                     $this->__browser->get($root_address);
+                     $timeStop = time();
+                     $difference = $timeStop - $timeStart;
+
+                     phpCrawler::log()->logInfo("[" . $currentProxy['ip'] . ":" . $currentProxy['port'] . "]  (" .
+				$this->__browser->getResponseCode() . ")" . "PROXY_CHECKER::PAGE LOADING TEST TIME: " . $difference . "sec");
+
+                     if ($this->__browser->getResponseCode() == "200" AND $difference < 20) {
+                            try{
+                                   $proxy->set('proxy_status', 1);
+                                   $proxy->save();
+                            }catch(Exception $e){
+                                   phpCrawler::log()->logCrit("PROXY MANAGER DATABASE ERROR:: " . $e->getMessage(),'db_error');
+                            }
+
+                            phpCrawler::log()->logInfo("PROXY_CHECKER::Proxy was selected: " .$currentProxy['ip'] .":" .$currentProxy['port']);
+
+                            return $currentProxy['ip'] . ":" . $currentProxy['port'];
+                     }
+                     else {
+                            try{
+                                   $proxy->set('proxy_status', 2);
+                                   $proxy->save();
+                            }catch(Exception $e){
+                                   phpCrawler::log()->logCrit("PROXY MANAGER DATABASE ERROR:: " . $e->getMessage(),'db_error');
+                            }
+                     }
+              }
+
+              return null;
+       }
+}
+
+?>

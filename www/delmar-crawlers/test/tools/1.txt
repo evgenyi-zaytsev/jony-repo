@@ -1,0 +1,1 @@
+*/10 * * * * /usr/bin/env TERM=dumb /bin/bash /root/test/tools/start_killer.sh
